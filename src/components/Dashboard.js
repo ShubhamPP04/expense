@@ -123,8 +123,13 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
   }, [navigate]);
 
   useEffect(() => {
-    const uniqueCategories = [...new Set(expenses.map(exp => exp.category))];
+    if (!Array.isArray(expenses)) return;
+    
+    const uniqueCategories = [...new Set(expenses.map(exp => exp.category).filter(Boolean))];
     setCategories(['all', ...uniqueCategories]);
+  }, [expenses]);
+
+  useEffect(() => {
     if (selectedCategory === 'all') {
       setFilteredExpenses(expenses);
     } else {
@@ -133,8 +138,13 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
   }, [expenses, selectedCategory]);
 
   useEffect(() => {
+    if (!Array.isArray(expenses)) return;
     setFilteredExpenses(applyFilters(expenses));
   }, [expenses, selectedCategory, dateRange, amountRange]);
+
+  useEffect(() => {
+    console.log('expenses:', expenses, 'type:', typeof expenses, 'isArray:', Array.isArray(expenses));
+  }, [expenses]);
 
   const fetchExpenses = async () => {
     try {
@@ -142,10 +152,14 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
       const response = await axios.get('http://localhost:3001/api/expenses', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setExpenses(response.data);
+      // Ensure we're getting the correct data structure
+      const expensesData = Array.isArray(response.data) ? response.data : 
+                          Array.isArray(response.data.data) ? response.data.data : [];
+      setExpenses(expensesData);
     } catch (err) {
       setError('Error fetching expenses');
       setSnackbarOpen(true);
+      setExpenses([]);
     }
   };
 
@@ -167,9 +181,42 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:3001/api/expenses', newExpense, {
+      const amount = parseFloat(newExpense.amount);
+      
+      // Validate amount
+      if (isNaN(amount)) {
+        setError('Please enter a valid amount');
+        setSnackbarOpen(true);
+        return;
+      }
+
+      const expenseData = {
+        description: newExpense.description,
+        amount: amount,
+        category: newExpense.category.trim() || 'Uncategorized',
+        date: new Date(newExpense.date).toISOString()
+      };
+
+      console.log('Sending expense data:', expenseData); // Debug log
+
+      const response = await axios.post('http://localhost:3001/api/expenses', expenseData, {
         headers: { Authorization: `Bearer ${token}` }
       });
+
+      // Extract and format the expense data from the response
+      const responseData = response.data.data || response.data;
+      const newExpenseData = {
+        ...responseData,
+        amount: parseFloat(responseData.amount),
+        date: new Date(responseData.date).toISOString()
+      };
+
+      console.log('Received expense data:', newExpenseData); // Debug log
+
+      // Update the expenses state with the new expense data
+      setExpenses(prev => Array.isArray(prev) ? [newExpenseData, ...prev] : [newExpenseData]);
+      
+      // Reset form
       setNewExpense({
         description: '',
         amount: '',
@@ -177,12 +224,94 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
         date: new Date(),
       });
       setAddExpenseDialogOpen(false);
-      fetchExpenses();
     } catch (err) {
+      console.error('Error adding expense:', err);
       setError('Error creating expense');
       setSnackbarOpen(true);
     }
   };
+
+  const handleEdit = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      const amount = parseFloat(newExpense.amount);
+      
+      // Validate amount
+      if (isNaN(amount)) {
+        setError('Please enter a valid amount');
+        setSnackbarOpen(true);
+        return;
+      }
+
+      const expenseData = {
+        description: newExpense.description,
+        amount: amount,
+        category: newExpense.category.trim() || 'Uncategorized',
+        date: new Date(newExpense.date).toISOString()
+      };
+
+      console.log('Sending updated expense data:', expenseData); // Debug log
+
+      const response = await axios.put(
+        `http://localhost:3001/api/expenses/${selectedExpense._id}`,
+        expenseData,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+
+      // Extract and format the expense data from the response
+      const responseData = response.data.data || response.data;
+      const updatedExpenseData = {
+        ...responseData,
+        amount: parseFloat(responseData.amount),
+        date: new Date(responseData.date).toISOString()
+      };
+
+      console.log('Received updated expense data:', updatedExpenseData); // Debug log
+
+      // Update the expenses state with the updated expense data
+      setExpenses(prev => 
+        Array.isArray(prev) 
+          ? prev.map(exp => exp._id === selectedExpense._id ? updatedExpenseData : exp)
+          : [updatedExpenseData]
+      );
+
+      // Reset form and state
+      setNewExpense({
+        description: '',
+        amount: '',
+        category: '',
+        date: new Date(),
+      });
+      setSelectedExpense(null);
+      setAddExpenseDialogOpen(false);
+    } catch (err) {
+      console.error('Error updating expense:', err);
+      setError('Error updating expense');
+      setSnackbarOpen(true);
+    }
+  };
+
+  // Add useEffect to handle form initialization when editing
+  useEffect(() => {
+    if (selectedExpense) {
+      setNewExpense({
+        description: selectedExpense.description || '',
+        amount: selectedExpense.amount ? parseFloat(selectedExpense.amount).toString() : '',
+        category: selectedExpense.category || '',
+        date: selectedExpense.date ? new Date(selectedExpense.date) : new Date(),
+      });
+    } else {
+      setNewExpense({
+        description: '',
+        amount: '',
+        category: '',
+        date: new Date(),
+      });
+    }
+  }, [selectedExpense]);
 
   const handleDelete = async (id) => {
     try {
@@ -204,6 +333,8 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
   };
 
   const getChartData = () => {
+    if (!Array.isArray(filteredExpenses)) return { labels: [], datasets: [] };
+
     const last7Days = [...Array(7)].map((_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - i);
@@ -217,7 +348,10 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
           const expDate = new Date(exp.date);
           return expDate.toDateString() === date.toDateString();
         })
-        .reduce((sum, exp) => sum + Number(exp.amount), 0)
+        .reduce((sum, exp) => {
+          const amount = parseFloat(exp.amount);
+          return sum + (isNaN(amount) ? 0 : amount);
+        }, 0)
     }));
 
     return {
@@ -235,12 +369,19 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
   };
 
   const applyFilters = (expenses) => {
+    if (!Array.isArray(expenses)) return [];
     return expenses.filter(expense => {
       const matchesCategory = selectedCategory === 'all' || expense.category === selectedCategory;
       const matchesDateRange = (!dateRange.start || new Date(expense.date) >= new Date(dateRange.start)) &&
         (!dateRange.end || new Date(expense.date) <= new Date(dateRange.end));
-      const matchesAmountRange = (!amountRange.min || expense.amount >= Number(amountRange.min)) &&
-        (!amountRange.max || expense.amount <= Number(amountRange.max));
+      
+      const expAmount = parseFloat(expense.amount);
+      const minAmount = amountRange.min ? parseFloat(amountRange.min) : null;
+      const maxAmount = amountRange.max ? parseFloat(amountRange.max) : null;
+      
+      const matchesAmountRange = 
+        (!minAmount || (expAmount && !isNaN(expAmount) && expAmount >= minAmount)) &&
+        (!maxAmount || (expAmount && !isNaN(expAmount) && expAmount <= maxAmount));
       
       return matchesCategory && matchesDateRange && matchesAmountRange;
     });
@@ -252,18 +393,30 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
       field: 'amount', 
       headerName: 'Amount', 
       flex: 1, 
-      valueFormatter: (params) => `₹${Number(params.value).toFixed(2)}` 
+      valueFormatter: (params) => {
+        const amount = parseFloat(params.value);
+        return `₹${isNaN(amount) ? '0.00' : amount.toFixed(2)}`;
+      }
     },
     { field: 'category', headerName: 'Category', flex: 1 },
     {
       field: 'date',
       headerName: 'Date',
       flex: 1,
-      valueFormatter: (params) => new Date(params.value).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      })
+      valueFormatter: (params) => {
+        try {
+          const date = new Date(params.value);
+          return date instanceof Date && !isNaN(date) 
+            ? date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+              })
+            : 'Invalid Date';
+        } catch (error) {
+          return 'Invalid Date';
+        }
+      }
     },
     {
       field: 'actions',
@@ -274,7 +427,11 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
           <IconButton
             size="small"
             onClick={() => {
-              setSelectedExpense(params.row);
+              const expense = {
+                ...params.row,
+                date: new Date(params.row.date)
+              };
+              setSelectedExpense(expense);
               setAddExpenseDialogOpen(true);
             }}
           >
@@ -337,6 +494,27 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
       </List>
     </Box>
   );
+
+  const calculateTotal = (expenseList) => {
+    if (!Array.isArray(expenseList)) return '0.00';
+    return expenseList
+      .reduce((sum, exp) => {
+        const amount = parseFloat(exp.amount);
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0)
+      .toFixed(2);
+  };
+
+  const calculateMonthlyTotal = (expenseList) => {
+    if (!Array.isArray(expenseList)) return '0.00';
+    return expenseList
+      .filter(exp => new Date(exp.date).getMonth() === new Date().getMonth())
+      .reduce((sum, exp) => {
+        const amount = parseFloat(exp.amount);
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0)
+      .toFixed(2);
+  };
 
   return (
     <Box sx={{ display: 'flex' }}>
@@ -418,7 +596,7 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
                     Total Expenses
                   </Typography>
                   <Typography variant="h4">
-                    ₹{expenses.reduce((sum, exp) => sum + Number(exp.amount), 0).toFixed(2)}
+                    ₹{calculateTotal(expenses)}
                   </Typography>
                 </CardContent>
               </Card>
@@ -456,10 +634,7 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
                     This Month
                   </Typography>
                   <Typography variant="h4">
-                    ₹{expenses
-                      .filter(exp => new Date(exp.date).getMonth() === new Date().getMonth())
-                      .reduce((sum, exp) => sum + Number(exp.amount), 0)
-                      .toFixed(2)}
+                    ₹{calculateMonthlyTotal(expenses)}
                   </Typography>
                 </CardContent>
               </Card>
@@ -530,7 +705,8 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
                     >
                       {categories.map(category => (
                         <MenuItem key={category} value={category}>
-                          {category.charAt(0).toUpperCase() + category.slice(1)}
+                          {category === 'all' ? 'All Categories' : 
+                            (category ? category.charAt(0).toUpperCase() + category.slice(1) : 'Uncategorized')}
                         </MenuItem>
                       ))}
                     </Select>
@@ -548,11 +724,14 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
                 </Box>
                 <Box sx={{ height: 400 }}>
                   <DataGrid
-                    rows={filteredExpenses}
+                    rows={filteredExpenses.map(expense => ({
+                      ...expense,
+                      id: expense._id // Ensure each row has an id property
+                    }))}
                     columns={columns}
                     pageSize={5}
                     rowsPerPageOptions={[5]}
-                    getRowId={(row) => row._id}
+                    getRowId={(row) => row._id || row.id}
                     disableSelectionOnClick
                   />
                 </Box>
@@ -563,7 +742,16 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
 
         <Dialog
           open={addExpenseDialogOpen}
-          onClose={() => setAddExpenseDialogOpen(false)}
+          onClose={() => {
+            setAddExpenseDialogOpen(false);
+            setSelectedExpense(null);
+            setNewExpense({
+              description: '',
+              amount: '',
+              category: '',
+              date: new Date(),
+            });
+          }}
           maxWidth="sm"
           fullWidth
         >
@@ -571,7 +759,7 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
             {selectedExpense ? 'Edit Expense' : 'Add New Expense'}
           </DialogTitle>
           <DialogContent>
-            <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
+            <Box component="form" onSubmit={selectedExpense ? handleEdit : handleSubmit} sx={{ mt: 2 }}>
               <TextField
                 fullWidth
                 label="Description"
@@ -590,9 +778,15 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
                 onChange={handleInputChange}
                 required
                 margin="normal"
+                inputProps={{
+                  min: "0",
+                  step: "0.01"
+                }}
                 InputProps={{
                   startAdornment: <InputAdornment position="start">₹</InputAdornment>,
                 }}
+                error={newExpense.amount !== '' && isNaN(parseFloat(newExpense.amount))}
+                helperText={newExpense.amount !== '' && isNaN(parseFloat(newExpense.amount)) ? 'Please enter a valid amount' : ''}
               />
               <TextField
                 fullWidth
@@ -619,8 +813,17 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
             </Box>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setAddExpenseDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSubmit} variant="contained">
+            <Button onClick={() => {
+              setAddExpenseDialogOpen(false);
+              setSelectedExpense(null);
+              setNewExpense({
+                description: '',
+                amount: '',
+                category: '',
+                date: new Date(),
+              });
+            }}>Cancel</Button>
+            <Button onClick={selectedExpense ? handleEdit : handleSubmit} variant="contained">
               {selectedExpense ? 'Update' : 'Add'}
             </Button>
           </DialogActions>
