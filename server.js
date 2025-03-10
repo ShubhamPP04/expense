@@ -46,9 +46,11 @@ io.on('connection', (socket) => {
 // Routes
 const authRoutes = require('./routes/auth');
 const expenseRoutes = require('./routes/expenses');
+const categoryRoutes = require('./routes/categories');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/expenses', expenseRoutes);
+app.use('/api/categories', categoryRoutes);
 
 // Make io accessible to our router
 app.set('io', io);

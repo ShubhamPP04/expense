@@ -505,15 +505,25 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
       .toFixed(2);
   };
 
-  const calculateMonthlyTotal = (expenseList) => {
-    if (!Array.isArray(expenseList)) return '0.00';
-    return expenseList
-      .filter(exp => new Date(exp.date).getMonth() === new Date().getMonth())
-      .reduce((sum, exp) => {
-        const amount = parseFloat(exp.amount);
-        return sum + (isNaN(amount) ? 0 : amount);
-      }, 0)
-      .toFixed(2);
+  const calculateCategoryTotals = () => {
+    if (!Array.isArray(filteredExpenses)) return [];
+    const categoryTotals = {};
+    
+    filteredExpenses.forEach(expense => {
+      const category = expense.category || 'Uncategorized';
+      const amount = parseFloat(expense.amount);
+      if (!isNaN(amount)) {
+        categoryTotals[category] = (categoryTotals[category] || 0) + amount;
+      }
+    });
+
+    return Object.entries(categoryTotals)
+      .map(([category, total]) => ({
+        category,
+        total: total.toFixed(2),
+        percentage: ((total / parseFloat(calculateTotal(filteredExpenses))) * 100).toFixed(1)
+      }))
+      .sort((a, b) => parseFloat(b.total) - parseFloat(a.total));
   };
 
   return (
@@ -523,6 +533,9 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
         sx={{
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           ml: { sm: `${drawerWidth}px` },
+          bgcolor: 'background.paper',
+          color: 'text.primary',
+          boxShadow: 1
         }}
       >
         <Toolbar>
@@ -534,10 +547,12 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            Dashboard
-          </Typography>
-          <IconButton color="inherit" onClick={() => setIsDarkMode(!isDarkMode)}>
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="h6" noWrap component="div">
+              Dashboard
+            </Typography>
+          </Box>
+          <IconButton onClick={() => setIsDarkMode(!isDarkMode)}>
             {isDarkMode ? <Brightness7 /> : <Brightness4 />}
           </IconButton>
         </Toolbar>
@@ -551,9 +566,7 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
           variant="temporary"
           open={drawerOpen}
           onClose={handleDrawerToggle}
-          ModalProps={{
-            keepMounted: true,
-          }}
+          ModalProps={{ keepMounted: true }}
           sx={{
             display: { xs: 'block', sm: 'none' },
             '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
@@ -583,78 +596,145 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
         }}
       >
         <Grid container spacing={3}>
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} md={6} lg={3}>
             <motion.div
               variants={cardVariants}
               initial="hidden"
               animate="visible"
-              transition={{ duration: 0.5, delay: 0.2 }}
+              transition={{ duration: 0.3, delay: 0 }}
             >
               <Card>
                 <CardContent>
-                  <Typography variant="h6" gutterBottom>
+                  <Typography color="textSecondary" gutterBottom>
                     Total Expenses
                   </Typography>
                   <Typography variant="h4">
-                    ₹{calculateTotal(expenses)}
-                  </Typography>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <motion.div
-              variants={cardVariants}
-              initial="hidden"
-              animate="visible"
-              transition={{ duration: 0.5, delay: 0.4 }}
-            >
-              <Card>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    Categories
-                  </Typography>
-                  <Typography variant="h4">
-                    {categories.length - 1}
-                  </Typography>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <motion.div
-              variants={cardVariants}
-              initial="hidden"
-              animate="visible"
-              transition={{ duration: 0.5, delay: 0.6 }}
-            >
-              <Card>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    This Month
-                  </Typography>
-                  <Typography variant="h4">
-                    ₹{calculateMonthlyTotal(expenses)}
+                    ₹{calculateTotal(filteredExpenses)}
                   </Typography>
                 </CardContent>
               </Card>
             </motion.div>
           </Grid>
 
-          <Grid item xs={12}>
+          <Grid item xs={12} md={6} lg={3}>
+            <motion.div
+              variants={cardVariants}
+              initial="hidden"
+              animate="visible"
+              transition={{ duration: 0.3, delay: 0.1 }}
+            >
+              <Card>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>
+                    Number of Expenses
+                  </Typography>
+                  <Typography variant="h4">
+                    {Array.isArray(filteredExpenses) ? filteredExpenses.length : 0}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </Grid>
+
+          <Grid item xs={12} md={6} lg={3}>
+            <motion.div
+              variants={cardVariants}
+              initial="hidden"
+              animate="visible"
+              transition={{ duration: 0.3, delay: 0.2 }}
+            >
+              <Card>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>
+                    Average Expense
+                  </Typography>
+                  <Typography variant="h4">
+                    ₹{Array.isArray(filteredExpenses) && filteredExpenses.length > 0
+                      ? (parseFloat(calculateTotal(filteredExpenses)) / filteredExpenses.length).toFixed(2)
+                      : '0.00'}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </Grid>
+
+          <Grid item xs={12} md={6} lg={3}>
+            <motion.div
+              variants={cardVariants}
+              initial="hidden"
+              animate="visible"
+              transition={{ duration: 0.3, delay: 0.3 }}
+            >
+              <Card>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>
+                    Categories
+                  </Typography>
+                  <Typography variant="h4">
+                    {Array.isArray(categories) ? categories.length - 1 : 0}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </Grid>
+
+          <Grid item xs={12} md={8}>
             <Card>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
                   Expense Trend
                 </Typography>
-                <Line data={getChartData()} options={{
-                  responsive: true,
-                  plugins: {
-                    legend: {
-                      position: 'top',
-                    }
-                  }
-                }} />
+                <Box sx={{ height: 300 }}>
+                  <Line
+                    data={getChartData()}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          display: false
+                        },
+                        tooltip: {
+                          mode: 'index',
+                          intersect: false,
+                        }
+                      },
+                      scales: {
+                        y: {
+                          beginAtZero: true,
+                          grid: {
+                            color: theme.palette.divider
+                          }
+                        },
+                        x: {
+                          grid: {
+                            display: false
+                          }
+                        }
+                      }
+                    }}
+                  />
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid item xs={12} md={4}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Category Breakdown
+                </Typography>
+                <List>
+                  {calculateCategoryTotals().map(({ category, total, percentage }) => (
+                    <ListItem key={category}>
+                      <ListItemText
+                        primary={category}
+                        secondary={`₹${total} (${percentage}%)`}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
               </CardContent>
             </Card>
           </Grid>
@@ -662,76 +742,25 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
           <Grid item xs={12}>
             <Card>
               <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                  <Typography variant="h6">
-                    Expenses List
-                  </Typography>
-                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                    <TextField
-                      label="Start Date"
-                      type="date"
-                      size="small"
-                      value={dateRange.start}
-                      onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                      InputLabelProps={{ shrink: true }}
-                    />
-                    <TextField
-                      label="End Date"
-                      type="date"
-                      size="small"
-                      value={dateRange.end}
-                      onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                      InputLabelProps={{ shrink: true }}
-                    />
-                    <TextField
-                      label="Min Amount"
-                      type="number"
-                      size="small"
-                      value={amountRange.min}
-                      onChange={(e) => setAmountRange(prev => ({ ...prev, min: e.target.value }))}
-                    />
-                    <TextField
-                      label="Max Amount"
-                      type="number"
-                      size="small"
-                      value={amountRange.max}
-                      onChange={(e) => setAmountRange(prev => ({ ...prev, max: e.target.value }))}
-                    />
-                    <Select
-                      value={selectedCategory}
-                      onChange={(e) => setSelectedCategory(e.target.value)}
-                      size="small"
-                      sx={{ minWidth: 120 }}
-                    >
-                      {categories.map(category => (
-                        <MenuItem key={category} value={category}>
-                          {category === 'all' ? 'All Categories' : 
-                            (category ? category.charAt(0).toUpperCase() + category.slice(1) : 'Uncategorized')}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                    <Button
-                      variant="contained"
-                      startIcon={<AddIcon />}
-                      onClick={() => {
-                        setSelectedExpense(null);
-                        setAddExpenseDialogOpen(true);
-                      }}
-                    >
-                      Add Expense
-                    </Button>
-                  </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6">Recent Expenses</Typography>
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => setAddExpenseDialogOpen(true)}
+                  >
+                    Add Expense
+                  </Button>
                 </Box>
                 <Box sx={{ height: 400 }}>
                   <DataGrid
                     rows={filteredExpenses.map(expense => ({
                       ...expense,
-                      id: expense._id // Ensure each row has an id property
+                      id: expense._id
                     }))}
                     columns={columns}
                     pageSize={5}
                     rowsPerPageOptions={[5]}
-                    getRowId={(row) => row._id || row.id}
                     disableSelectionOnClick
                   />
                 </Box>
@@ -752,8 +781,6 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
               date: new Date(),
             });
           }}
-          maxWidth="sm"
-          fullWidth
         >
           <DialogTitle>
             {selectedExpense ? 'Edit Expense' : 'Add New Expense'}
@@ -778,15 +805,9 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
                 onChange={handleInputChange}
                 required
                 margin="normal"
-                inputProps={{
-                  min: "0",
-                  step: "0.01"
-                }}
                 InputProps={{
                   startAdornment: <InputAdornment position="start">₹</InputAdornment>,
                 }}
-                error={newExpense.amount !== '' && isNaN(parseFloat(newExpense.amount))}
-                helperText={newExpense.amount !== '' && isNaN(parseFloat(newExpense.amount)) ? 'Please enter a valid amount' : ''}
               />
               <TextField
                 fullWidth
@@ -813,17 +834,24 @@ const Dashboard = ({ isDarkMode, setIsDarkMode }) => {
             </Box>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => {
-              setAddExpenseDialogOpen(false);
-              setSelectedExpense(null);
-              setNewExpense({
-                description: '',
-                amount: '',
-                category: '',
-                date: new Date(),
-              });
-            }}>Cancel</Button>
-            <Button onClick={selectedExpense ? handleEdit : handleSubmit} variant="contained">
+            <Button
+              onClick={() => {
+                setAddExpenseDialogOpen(false);
+                setSelectedExpense(null);
+                setNewExpense({
+                  description: '',
+                  amount: '',
+                  category: '',
+                  date: new Date(),
+                });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={selectedExpense ? handleEdit : handleSubmit}
+              variant="contained"
+            >
               {selectedExpense ? 'Update' : 'Add'}
             </Button>
           </DialogActions>
